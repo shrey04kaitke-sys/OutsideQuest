@@ -1,0 +1,27 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local user progress and temporary atomic-write files
+data/
+*.json.tmp
+
+# Environment secrets and editor/system noise
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

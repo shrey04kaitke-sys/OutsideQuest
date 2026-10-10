@@ -1,0 +1,1 @@
+"""OutsideQuest application package."""
