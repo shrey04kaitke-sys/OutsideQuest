@@ -83,10 +83,12 @@ Optional local settings can be provided with environment variables:
 ```powershell
 $env:OUTSIDEQUEST_OLLAMA_URL = "http://localhost:11434"
 $env:OUTSIDEQUEST_OLLAMA_MODEL = "qwen2.5:3b"
+# Optional: store progress outside the project folder.
+$env:OUTSIDEQUEST_DATA_PATH = "$HOME\Documents\OutsideQuest\user_data.json"
 streamlit run app.py
 ```
 
-No `.env` file or secrets are needed. The app sends generation requests only to the configured local Ollama server.
+`OUTSIDEQUEST_DATA_PATH` is optional; by default progress is saved to `data/user_data.json` in the project folder. No `.env` file or secrets are needed. The app sends generation requests only to the configured local Ollama server.
 
 ## Run tests
 
@@ -123,3 +125,16 @@ Screenshots can be added here after launching the app. The repository does not y
 ## License
 
 Released under the [MIT License](LICENSE), a conventional permissive open-source license that allows reuse, modification, and redistribution while retaining the copyright and license notice.
+
+## Deploying a public demo (Render)
+
+`render.yaml` describes a Render web service.
+
+- Build command: `pip install -r requirements.txt`
+- Start command: `streamlit run app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true`
+
+Public deployments run in **public mode** (`OUTSIDEQUEST_PUBLIC_MODE=true`, also auto-enabled when Render's `RENDER=true` is present):
+
+- Ollama is not available on Render, so every mission is a built-in fallback mission and is labeled as not AI-generated. The app only contacts an Ollama server in public mode if you set `OUTSIDEQUEST_OLLAMA_URL` yourself.
+- Completed-mission tracking, the reflection journal, and the progress sidebar are disabled. The shared server file is never read or written, so one visitor's data cannot appear for another. Per-user storage would need accounts and a database, which this project does not have.
+- Running locally (no flag) keeps full Ollama support and private JSON persistence.

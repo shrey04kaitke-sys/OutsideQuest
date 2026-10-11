@@ -9,6 +9,7 @@ from typing import Any
 
 import requests
 
+from outsidequest.deployment import is_public_mode
 from outsidequest.models import (
     Mission,
     MissionValidationError,
@@ -28,9 +29,11 @@ SYSTEM_PROMPT = (
     "say only 'a familiar public place the user chooses'. "
     "Never invent local conditions, weather, or opening hours. Never suggest trespassing, "
     "entering restricted/private/abandoned places, risky climbing, unsafe roads, interacting "
-    "with wildlife, or going somewhere isolated. Prefer gentle, permitted activities; for "
-    "low energy, choose a gentle or seated activity. Follow the user's available time and "
-    "budget exactly. Keep the response concise and practical."
+    "with wildlife, or going somewhere isolated. Do not touch, collect, remove, or disturb "
+    "plants, animals, nests, feathers, seeds, rocks, or other natural objects; suggest "
+    "observing or photographing them from a respectful distance instead. Prefer gentle, "
+    "permitted activities; for low energy, choose a gentle or seated activity. Follow the "
+    "user's available time and budget exactly. Keep the response concise and practical."
 )
 
 
@@ -109,15 +112,28 @@ def generate_adventure(
     fallback_variant: int = 0,
 ) -> GenerationResult:
     """Use Ollama when possible; identify every built-in result as fallback."""
-    ollama = client or OllamaClient.from_environment()
-    try:
-        return GenerationResult(mission=ollama.generate(preferences), source="ollama")
-    except (OllamaError, MissionValidationError) as exc:
+    if client is None and is_public_mode() and not os.getenv("OUTSIDEQUEST_OLLAMA_URL"):
         return GenerationResult(
             mission=create_fallback_mission(preferences, fallback_variant),
             source="fallback",
-            notice=str(exc),
+            notice="This public deployment does not include a local AI model.",
         )
+    ollama = client or OllamaClient.from_environment()
+    try:
+        return GenerationResult(mission=ollama.generate(preferences), source="ollama")
+    except MissionValidationError as first_error:
+        try:
+            return GenerationResult(mission=ollama.generate(preferences), source="ollama")
+        except (OllamaError, MissionValidationError) as retry_error:
+            notice = f"{first_error} A second generation attempt also failed: {retry_error}"
+    except OllamaError as exc:
+        notice = str(exc)
+
+    return GenerationResult(
+        mission=create_fallback_mission(preferences, fallback_variant),
+        source="fallback",
+        notice=notice,
+    )
 
 
 def create_fallback_mission(preferences: Preferences, variant: int = 0) -> Mission:
@@ -127,10 +143,10 @@ def create_fallback_mission(preferences: Preferences, variant: int = 0) -> Missi
             (
                 "Follow a familiar path with fresh eyes",
                 "Take a gentle walk on a route you already know, and notice three details "
-                f"connected to {interest}. Choose a public, open route and turn back whenever "
+                f"connected to {interest}. Choose a public route you are allowed to use and turn back whenever "
                 "you like.",
                 [
-                    "Pick a familiar public route that feels comfortable today.",
+                    "Pick a familiar public route you are allowed to use and that feels comfortable today.",
                     f"Walk at an easy pace and look for three small details related to {interest}.",
                     "Pause somewhere safe to jot down or remember your favorite detail.",
                 ],
@@ -142,7 +158,7 @@ def create_fallback_mission(preferences: Preferences, variant: int = 0) -> Missi
                 "A low-pressure outdoor reset can make an ordinary day feel more vivid, "
                 f"with a little attention to {interest}.",
                 [
-                    "Choose a familiar outdoor spot that is open to visitors.",
+                    "Choose a familiar outdoor place you are allowed to use.",
                     "Notice one thing you can see, hear, smell, and feel without touching plants or wildlife.",
                     "Finish with a comfortable stroll back the way you came.",
                 ],
@@ -189,7 +205,7 @@ def create_fallback_mission(preferences: Preferences, variant: int = 0) -> Missi
                 "Take your curiosity on a short loop",
                 f"Give {interest} a little space in your day with an easy activity that works indoors or out.",
                 [
-                    "Pick a familiar, comfortable spot indoors or on an open public route.",
+                    "Pick a familiar, comfortable indoor place or public route you are allowed to use.",
                     f"Look for a small detail related to {interest}, without needing to buy anything.",
                     "Pause and capture the moment in a sentence or quick sketch.",
                 ],

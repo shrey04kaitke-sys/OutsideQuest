@@ -5,6 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from outsidequest.adventure import GenerationResult, generate_adventure
+from outsidequest.deployment import is_public_mode
 from outsidequest.models import Mission, MissionValidationError, Preferences, validate_preferences
 from outsidequest.storage import (
     DEFAULT_DATA_PATH,
@@ -36,7 +37,22 @@ st.markdown(
     .mission-card { border: 1px solid #dce8dc; background: linear-gradient(145deg, #fff, #f2f7ef); border-radius: 24px; padding: 1.6rem 1.8rem; box-shadow: 0 12px 32px #23433012; }
     .tag { display: inline-block; border-radius: 99px; background: #e7f1e8; color: #286047; padding: .35rem .7rem; font-size: .82rem; font-weight: 700; margin-right: .35rem; }
     section[data-testid="stSidebar"] { background: #f0f4ed; border-right: 1px solid #e2e9df; }
-    div.stButton > button[kind="primary"] { background: #2c7254; border-color: #2c7254; }
+    section[data-testid="stSidebar"],
+    section[data-testid="stSidebar"] :is(h1, h2, h3, p, span, label, li, div[data-testid="stMetricValue"], div[data-testid="stMetricLabel"], div[data-testid="stMarkdownContainer"]) { color: var(--ink); }
+    section[data-testid="stSidebar"] :is([data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] *, div[data-testid="stMetricLabel"], div[data-testid="stMetricLabel"] *) { color: var(--muted) !important; }
+    section[data-testid="stSidebar"] div[data-testid="stProgress"] > div > div { background-color: #d5e4d6; }
+    section[data-testid="stSidebar"] div[data-testid="stProgress"] > div > div > div { background-color: var(--leaf); }
+    button[data-testid="stBaseButton-primary"],
+    button[data-testid="stBaseButton-primaryFormSubmit"] {
+      background-color: #2c7254 !important;
+      border-color: #2c7254 !important;
+      color: #fff !important;
+    }
+    button[data-testid="stBaseButton-primary"]:hover,
+    button[data-testid="stBaseButton-primaryFormSubmit"]:hover {
+      background-color: #225c43 !important;
+      border-color: #225c43 !important;
+    }
     div.stButton > button { border-radius: 12px; }
     div[data-testid="stForm"] { border: 1px solid #e4e9df; border-radius: 20px; padding: 1.2rem; background: #ffffffc9; }
     @media (max-width: 700px) { .hero { padding: 1.5rem; border-radius: 20px; } .mission-card { padding: 1.25rem; } }
@@ -45,11 +61,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-try:
-    progress_data = load_data()
-except StorageError as exc:
-    st.error(f"Your local progress could not be loaded. {exc}")
-    st.stop()
+PUBLIC_MODE = is_public_mode()
+
+if PUBLIC_MODE:
+    # Never touch the shared JSON file on a public host: it would mix visitors' data.
+    progress_data = {"completed_missions": [], "journal_entries": []}
+else:
+    try:
+        progress_data = load_data()
+    except StorageError as exc:
+        st.error(f"Your local progress could not be loaded. {exc}")
+        st.stop()
 
 completed = progress_data["completed_missions"]
 journal_entries = progress_data["journal_entries"]
@@ -57,20 +79,26 @@ journal_entries = progress_data["journal_entries"]
 with st.sidebar:
     st.markdown("## 🌱 Your journey")
     st.caption("Small adventures add up.")
-    st.metric("Adventures completed", len(completed))
-    st.metric("Reflections saved", len(journal_entries))
-    next_goal = 5
-    st.progress(min(len(completed) / next_goal, 1.0))
-    st.caption(f"{max(next_goal - len(completed), 0)} until your next 5-adventure milestone")
-    st.divider()
-    st.markdown("**Your recent adventures**")
-    if completed:
-        for entry in reversed(completed[-4:]):
-            st.markdown(f"✓ {entry.get('title', 'Completed mission')}")
+    if PUBLIC_MODE:
+        st.info(
+            "Progress and reflections are turned off in this public demo so no one's "
+            "personal notes are stored or shared. Run OutsideQuest locally to keep a private journey."
+        )
     else:
-        st.caption("Your first quest is waiting.")
-    st.divider()
-    st.caption("🔒 Your history stays in a local JSON file on this device.")
+        st.metric("Adventures completed", len(completed))
+        st.metric("Reflections saved", len(journal_entries))
+        next_goal = 5
+        st.progress(min(len(completed) / next_goal, 1.0))
+        st.caption(f"{max(next_goal - len(completed), 0)} until your next 5-adventure milestone")
+        st.divider()
+        st.markdown("**Your recent adventures**")
+        if completed:
+            for entry in reversed(completed[-4:]):
+                st.markdown(f"✓ {entry.get('title', 'Completed mission')}")
+        else:
+            st.caption("Your first quest is waiting.")
+        st.divider()
+        st.caption("🔒 Your history stays in a local JSON file on this device.")
 
 st.markdown(
     """
@@ -89,8 +117,9 @@ with intro_left:
     st.markdown("### Your next good story starts small.")
     st.write("Tell us what today looks like. We’ll make you a practical mission that fits.")
 with intro_right:
+    first_tag = "Built-in demo missions" if PUBLIC_MODE else "Local AI"
     st.markdown(
-        '<div class="panel"><span class="tag">Local AI</span><span class="tag">No API keys</span>'
+        f'<div class="panel"><span class="tag">{first_tag}</span><span class="tag">No API keys</span>'
         '<span class="tag">Your pace</span><p style="color:#557166;margin:.8rem 0 0">'
         "Made for real life: free and low-energy options count, too.</p></div>",
         unsafe_allow_html=True,
@@ -141,7 +170,10 @@ if st.session_state.get("current_result"):
     st.markdown("---")
     st.markdown("## ✨ Your mission")
     if result_data["source"] == "ollama":
-        st.success("Created locally with your Ollama model. Your preferences were not sent to a cloud AI service.")
+        if PUBLIC_MODE:
+            st.success("Created with the Ollama model configured for this deployment.")
+        else:
+            st.success("Created locally with your Ollama model. Your preferences were not sent to a cloud AI service.")
     else:
         st.info("🌿 Built-in fallback mission — this is not AI-generated content.")
         if result_data.get("notice"):
@@ -164,6 +196,8 @@ if st.session_state.get("current_result"):
     with action_col:
         if already_completed:
             st.success("Mission completed — nicely done!")
+        elif PUBLIC_MODE:
+            st.caption("Completion tracking is available when you run OutsideQuest locally.")
         elif st.button("✅ I completed this mission", type="primary", use_container_width=True):
             try:
                 progress_data = complete_mission(mission)
@@ -190,45 +224,56 @@ if st.session_state.get("current_result"):
                 }
                 st.rerun()
 
-st.markdown("---")
-st.markdown("## 📓 Your reflection journal")
-st.write("Keep a little memory of how it felt. A sentence is plenty.")
-completed_titles = [entry.get("title", "Completed adventure") for entry in completed]
-with st.form("journal_entry"):
-    associated_mission = st.selectbox(
-        "Connect this reflection to an adventure (optional)",
-        ["Just a reflection", *completed_titles],
+if PUBLIC_MODE:
+    st.markdown("---")
+    st.markdown("## 📓 Reflection journal")
+    st.info(
+        "The journal is disabled in this public demo because reflections are personal and "
+        "this deployment has no per-user storage. Run OutsideQuest locally to keep a private journal."
     )
-    reflection = st.text_area(
-        "What did you notice, enjoy, or want to remember?",
-        max_chars=2000,
-        placeholder="A small thing that made today feel different…",
-    )
-    save_reflection = st.form_submit_button("Save reflection", use_container_width=True)
+else:
+    st.markdown("---")
+    st.markdown("## 📓 Your reflection journal")
+    st.write("Keep a little memory of how it felt. A sentence is plenty.")
+    completed_titles = [entry.get("title", "Completed adventure") for entry in completed]
+    with st.form("journal_entry"):
+        associated_mission = st.selectbox(
+            "Connect this reflection to an adventure (optional)",
+            ["Just a reflection", *completed_titles],
+        )
+        reflection = st.text_area(
+            "What did you notice, enjoy, or want to remember?",
+            max_chars=2000,
+            placeholder="A small thing that made today feel different…",
+        )
+        save_reflection = st.form_submit_button("Save reflection", use_container_width=True)
 
-if save_reflection:
-    if not reflection.strip():
-        st.error("Write a few words before saving your reflection.")
-    else:
-        try:
-            progress_data = add_journal_entry(
-                reflection,
-                None if associated_mission == "Just a reflection" else associated_mission,
-            )
-        except StorageError as exc:
-            st.error(f"Your reflection was not saved. {exc}")
-        except ValueError as exc:
-            st.error(str(exc))
+    if save_reflection:
+        if not reflection.strip():
+            st.error("Write a few words before saving your reflection.")
         else:
-            st.success("Reflection saved on this device.")
-            st.rerun()
+            try:
+                progress_data = add_journal_entry(
+                    reflection,
+                    None if associated_mission == "Just a reflection" else associated_mission,
+                )
+            except StorageError as exc:
+                st.error(f"Your reflection was not saved. {exc}")
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["journal_saved"] = True
+                st.rerun()
 
-if journal_entries:
-    with st.expander(f"Read your reflections ({len(journal_entries)})"):
-        for entry in reversed(journal_entries):
-            st.markdown(f"**{entry.get('mission_title') or 'A reflection'}**")
-            st.write(entry.get("text", ""))
-            st.caption(entry.get("created_at", "")[:10])
-            st.divider()
+    if st.session_state.pop("journal_saved", False):
+        st.success("Reflection saved on this device.")
 
-st.caption(f"Progress is stored locally at `{DEFAULT_DATA_PATH}`. Keep this file private; it is excluded from Git.")
+    if journal_entries:
+        with st.expander(f"Read your reflections ({len(journal_entries)})"):
+            for entry in reversed(journal_entries):
+                st.markdown(f"**{entry.get('mission_title') or 'A reflection'}**")
+                st.write(entry.get("text", ""))
+                st.caption(entry.get("created_at", "")[:10])
+                st.divider()
+
+    st.caption(f"Progress is stored locally at `{DEFAULT_DATA_PATH}`. Keep this file private; it is excluded from Git.")

@@ -100,6 +100,31 @@ class MissionValidationTests(unittest.TestCase):
             preferences(),
         )
 
+    def test_rejects_collecting_natural_objects(self) -> None:
+        with self.assertRaisesRegex(MissionValidationError, "collecting natural objects"):
+            mission_from_payload(
+                valid_mission(
+                    steps=[
+                        "Collect items such as a feather.",
+                        "Notice three details.",
+                        "Write one down.",
+                    ]
+                ),
+                preferences(),
+            )
+
+    def test_allows_taking_a_photo_of_natural_objects(self) -> None:
+        mission_from_payload(
+            valid_mission(
+                steps=[
+                    "Take a flower photo from the path.",
+                    "Notice three details.",
+                    "Write one down.",
+                ]
+            ),
+            preferences(),
+        )
+
 
 class OllamaTests(unittest.TestCase):
     @patch("outsidequest.adventure.requests.post")
@@ -129,10 +154,27 @@ class OllamaTests(unittest.TestCase):
         self.assertEqual(result.source, "fallback")
         self.assertIn("safety guidelines", result.notice or "")
 
+    def test_retries_once_when_model_output_fails_validation(self) -> None:
+        client = Mock()
+        accepted_mission = create_fallback_mission(preferences())
+        client.generate.side_effect = [
+            MissionValidationError("The first draft was unsafe."),
+            accepted_mission,
+        ]
+        result = generate_adventure(preferences(), client=client)
+        self.assertEqual(result.source, "ollama")
+        self.assertIs(result.mission, accepted_mission)
+        self.assertEqual(client.generate.call_count, 2)
+
     def test_fallback_variants_are_distinct(self) -> None:
         first = create_fallback_mission(preferences(), 0)
         second = create_fallback_mission(preferences(), 1)
         self.assertNotEqual(first.title, second.title)
+        combined_text = " ".join(
+            [first.title, first.reason, first.safety_tip, *first.steps]
+        ).casefold()
+        self.assertNotIn("open to visitors", combined_text)
+        self.assertNotIn("open route", combined_text)
 
 
 class LocalStorageTests(unittest.TestCase):

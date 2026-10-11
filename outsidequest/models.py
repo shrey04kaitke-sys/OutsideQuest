@@ -45,6 +45,13 @@ UNVERIFIED_PLACE_PATTERN = re.compile(
     r"(?:(?:the|a|an)\s+)?"
     r"((?:[A-Z][A-Za-z'-]*|[A-Z]{2,})(?:\s+(?:[A-Z][A-Za-z'-]*|[A-Z]{2,})){0,3})\b"
 )
+NATURE_COLLECTION_PATTERN = re.compile(
+    r"\b(?:collect|pick|take|remove|gather)\s+"
+    r"(?:(?:items?|things?)\s+such\s+as\s+)?"
+    r"(?:(?:a|an|the)\s+)?"
+    r"(?:leaves?|flowers?|feathers?|seeds?|stones?|rocks?|shells?|plants?|mushrooms?)\b"
+    r"(?!\s+(?:photo|picture|photograph|image)\b)"
+)
 GENERIC_PLACE_WORDS = {
     "beach",
     "cafe",
@@ -178,6 +185,10 @@ def mission_from_payload(payload: dict[str, Any], preferences: Preferences) -> M
     combined_text = " ".join([title, reason, safety_tip, *steps]).casefold()
     if any(re.search(rf"\b{re.escape(phrase)}\b", combined_text) for phrase in UNSAFE_PHRASES):
         raise MissionValidationError("The model suggested an activity that did not meet safety guidelines.")
+    if NATURE_COLLECTION_PATTERN.search(combined_text):
+        raise MissionValidationError(
+            "The model suggested touching or collecting natural objects; observe them without disturbing them."
+        )
     if any(phrase in combined_text for phrase in UNVERIFIED_PLACE_PHRASES):
         raise MissionValidationError(
             "The model included an unsupported local place or availability detail."

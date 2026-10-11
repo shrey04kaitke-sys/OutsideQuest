@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,12 @@ from uuid import uuid4
 
 from outsidequest.models import Mission
 
-DEFAULT_DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "user_data.json"
+DEFAULT_DATA_PATH = Path(
+    os.getenv(
+        "OUTSIDEQUEST_DATA_PATH",
+        str(Path(__file__).resolve().parent.parent / "data" / "user_data.json"),
+    )
+).expanduser()
 EMPTY_DATA: dict[str, list[dict[str, Any]]] = {
     "completed_missions": [],
     "journal_entries": [],
